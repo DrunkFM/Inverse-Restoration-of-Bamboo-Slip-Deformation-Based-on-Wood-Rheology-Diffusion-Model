@@ -67,18 +67,17 @@ class BambooSlipsDataset(Dataset):
 
 
 class TrainingLogger:
-    """训练日志记录器"""
+    """简化的训练日志记录器"""
 
     def __init__(self, log_dir):
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
         # 子目录
-        self.samples_dir = self.log_dir / "samples"
         self.checkpoints_dir = self.log_dir / "checkpoints"
         self.visualizations_dir = self.log_dir / "visualizations"
 
-        for dir_path in [self.samples_dir, self.checkpoints_dir, self.visualizations_dir]:
+        for dir_path in [self.checkpoints_dir, self.visualizations_dir]:
             dir_path.mkdir(exist_ok=True)
 
         # 日志文件
@@ -88,8 +87,6 @@ class TrainingLogger:
         # 训练指标
         self.steps = []
         self.losses = []
-        self.mse_losses = []
-        self.psnr_values = []
 
         # 初始化文件
         with open(self.log_file, 'w', encoding='utf-8') as f:
@@ -98,7 +95,7 @@ class TrainingLogger:
             f.write("=" * 50 + "\n\n")
 
         with open(self.metrics_file, 'w', encoding='utf-8') as f:
-            f.write("step,loss,mse,psnr\n")
+            f.write("step,loss\n")
 
     def log(self, message, step=None):
         """记录日志"""
@@ -110,26 +107,20 @@ class TrainingLogger:
         with open(self.log_file, 'a', encoding='utf-8') as f:
             f.write(message + "\n")
 
-    def log_metrics(self, step, loss, mse=None, psnr=None):
+    def log_metrics(self, step, loss):
         """记录训练指标"""
         self.steps.append(step)
         self.losses.append(loss)
 
-        if mse is not None:
-            self.mse_losses.append(mse)
-        if psnr is not None:
-            self.psnr_values.append(psnr)
-
         # 保存到CSV
         with open(self.metrics_file, 'a', encoding='utf-8') as f:
-            f.write(f"{step},{loss},{mse or 0},{psnr or 0}\n")
+            f.write(f"{step},{loss}\n")
 
-    def save_training_visualization(self, original_batch, deformed_batch,
-                                    restored_batch, step, max_samples=4):
-        """保存训练可视化"""
+    def save_training_visualization(self, original_batch, deformed_batch, step, max_samples=4):
+        """保存训练可视化 - 只显示原图vs变形图"""
         batch_size = min(original_batch.size(0), max_samples)
 
-        fig, axes = plt.subplots(3, batch_size, figsize=(4 * batch_size, 12))
+        fig, axes = plt.subplots(2, batch_size, figsize=(4 * batch_size, 8))
         if batch_size == 1:
             axes = axes.reshape(-1, 1)
 
@@ -145,84 +136,37 @@ class TrainingLogger:
             deformed_img = deformed_batch[i].permute(1, 2, 0).cpu().numpy()
             deformed_img = np.clip(deformed_img, 0, 1)
             axes[1, i].imshow(deformed_img)
-            axes[1, i].set_title(f'蠕变变形 {i + 1}')
+            axes[1, i].set_title(f'物理变形 {i + 1}')
             axes[1, i].axis('off')
-
-            # 恢复图像
-            if restored_batch is not None:
-                restored_img = restored_batch[i].permute(1, 2, 0).cpu().numpy()
-                restored_img = np.clip(restored_img, 0, 1)
-                axes[2, i].imshow(restored_img)
-                axes[2, i].set_title(f'模型恢复 {i + 1}')
-                axes[2, i].axis('off')
-            else:
-                axes[2, i].text(0.5, 0.5, '待恢复', ha='center', va='center')
-                axes[2, i].set_title(f'模型恢复 {i + 1}')
-                axes[2, i].axis('off')
 
         plt.tight_layout()
         plt.savefig(self.visualizations_dir / f"training_step_{step}.png",
                     dpi=150, bbox_inches='tight')
         plt.close()
 
-        # 单独保存每个样本
-        for i in range(batch_size):
-            sample_dir = self.visualizations_dir / f"step_{step}_samples"
-            sample_dir.mkdir(exist_ok=True)
-
-            # 保存原始图像
-            orig_img = original_batch[i].permute(1, 2, 0).cpu().numpy()
-            orig_img = np.clip(orig_img * 255, 0, 255).astype(np.uint8)
-            orig_pil = Image.fromarray(orig_img)
-            orig_pil.save(sample_dir / f"original_{i}.png")
-
-            # 保存变形图像
-            deformed_img = deformed_batch[i].permute(1, 2, 0).cpu().numpy()
-            deformed_img = np.clip(deformed_img * 255, 0, 255).astype(np.uint8)
-            deformed_pil = Image.fromarray(deformed_img)
-            deformed_pil.save(sample_dir / f"deformed_{i}.png")
-
     def plot_training_curves(self):
         """绘制训练曲线"""
         if len(self.steps) == 0:
             return
 
-        fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
         # 损失曲线
-        axes[0, 0].plot(self.steps, self.losses, 'b-', label='总损失')
-        axes[0, 0].set_xlabel('训练步数')
-        axes[0, 0].set_ylabel('损失值')
-        axes[0, 0].set_title('训练损失曲线')
-        axes[0, 0].legend()
-        axes[0, 0].grid(True, alpha=0.3)
-
-        # MSE曲线
-        if len(self.mse_losses) > 0:
-            axes[0, 1].plot(self.steps, self.mse_losses, 'r-', label='MSE损失')
-            axes[0, 1].set_xlabel('训练步数')
-            axes[0, 1].set_ylabel('MSE值')
-            axes[0, 1].set_title('均方误差曲线')
-            axes[0, 1].legend()
-            axes[0, 1].grid(True, alpha=0.3)
-
-        # PSNR曲线
-        if len(self.psnr_values) > 0:
-            axes[1, 0].plot(self.steps, self.psnr_values, 'g-', label='PSNR')
-            axes[1, 0].set_xlabel('训练步数')
-            axes[1, 0].set_ylabel('PSNR (dB)')
-            axes[1, 0].set_title('峰值信噪比曲线')
-            axes[1, 0].legend()
-            axes[1, 0].grid(True, alpha=0.3)
+        axes[0].plot(self.steps, self.losses, 'b-', label='训练损失')
+        axes[0].set_xlabel('训练步数')
+        axes[0].set_ylabel('损失值')
+        axes[0].set_title('训练损失曲线')
+        axes[0].legend()
+        axes[0].grid(True, alpha=0.3)
 
         # 损失分布
         if len(self.losses) > 10:
-            axes[1, 1].hist(self.losses[-100:], bins=20, alpha=0.7, label='最近100步')
-            axes[1, 1].set_xlabel('损失值')
-            axes[1, 1].set_ylabel('频次')
-            axes[1, 1].set_title('损失分布')
-            axes[1, 1].legend()
-            axes[1, 1].grid(True, alpha=0.3)
+            axes[1].hist(self.losses[-100:], bins=20, alpha=0.7, label='最近100步')
+            axes[1].set_xlabel('损失值')
+            axes[1].set_ylabel('频次')
+            axes[1].set_title('损失分布')
+            axes[1].legend()
+            axes[1].grid(True, alpha=0.3)
 
         plt.tight_layout()
         plt.savefig(self.log_dir / "training_curves.png", dpi=150, bbox_inches='tight')
@@ -231,11 +175,11 @@ class TrainingLogger:
 
 def create_model(args):
     """创建模型"""
-    # 创建U-Net模型
+    # 创建U-Net模型 - 使用简化的控制点网格
     model = ControlPointUNet(
         img_channels=args.img_channels,
         base_channels=args.base_channels,
-        control_grid_size=(args.control_nx, args.control_ny),
+        control_grid_size=(args.control_nx, args.control_ny),  # (4, 2)
         channel_mults=args.channel_mults,
         num_res_blocks=args.num_res_blocks,
         time_emb_dim=args.time_emb_dim,
@@ -274,40 +218,15 @@ def create_model(args):
 
 
 def simple_evaluate_model(model, trainer, test_batch, device):
-    """简单的模型评估 - 只计算损失"""
+    """简单的模型评估 - 只计算真实损失"""
     model.eval()
     with torch.no_grad():
-        # 进行物理变形并计算损失
+        # 计算训练损失
         loss_batch = trainer(test_batch)
         avg_loss = loss_batch.mean().item()
 
-        # 简单的MSE计算
-        # 随机选择一个变形程度进行测试
-        t_test = torch.randint(1, trainer.T + 1, (test_batch.size(0),), device=device)
-
-        # 模拟变形过程计算MSE
-        total_mse = 0
-        batch_size = test_batch.size(0)
-
-        for b in range(min(batch_size, 4)):  # 只测试前4个样本
-            # 重置物理引擎
-            trainer.forward_trainer.reset_control_state()
-
-            # 进行物理变形
-            x_t, _ = trainer.forward_trainer.forward_step_by_step(
-                test_batch[b:b + 1], t_test[b].item()
-            )
-
-            # 计算变形后与原图的MSE
-            mse = torch.nn.functional.mse_loss(x_t, test_batch[b:b + 1])
-            total_mse += mse.item()
-
-        avg_mse = total_mse / min(batch_size, 4)
-        # 计算PSNR
-        avg_psnr = -10 * np.log10(avg_mse + 1e-8)
-
     model.train()
-    return avg_loss, avg_mse, avg_psnr
+    return avg_loss
 
 
 def train_model(args):
@@ -329,7 +248,6 @@ def train_model(args):
     # 数据预处理
     transform = transforms.Compose([
         transforms.ToTensor(),
-        # 不进行归一化到[-1,1]，保持[0,1]范围
     ])
 
     # 自动检测数据集结构
@@ -373,7 +291,7 @@ def train_model(args):
     # 数据加载器
     train_dataloader = DataLoader(
         train_dataset,
-        batch_size = 2,
+        batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
         pin_memory=True,
@@ -385,7 +303,7 @@ def train_model(args):
     if test_dataset is not None:
         test_dataloader = DataLoader(
             test_dataset,
-            batch_size = 2,
+            batch_size=args.batch_size,
             shuffle=False,
             num_workers=args.num_workers,
             pin_memory=True,
@@ -445,9 +363,9 @@ def train_model(args):
             # 梯度清零
             optimizer.zero_grad()
 
-            # 前向传播
+            # 前向传播 - 核心训练步骤
             loss_batch = trainer(batch)
-            loss = loss_batch.mean()  # 平均损失
+            loss = loss_batch.mean()
 
             # 反向传播
             loss.backward()
@@ -477,48 +395,58 @@ def train_model(args):
             if global_step % args.sample_interval == 0:
                 logger.log(f"💾 保存可视化样本 - 步骤 {global_step}")
 
-                # 使用测试数据进行评估（如果有的话）
+                # 获取评估用的批次
                 if test_dataloader is not None:
-                    # 从测试集获取一个批次
-                    test_batch = next(iter(test_dataloader))[:4].to(device)
-                    avg_loss, avg_mse, avg_psnr = simple_evaluate_model(
-                        model, trainer, test_batch, device
-                    )
-                    logger.log(f"📊 测试集 - 损失: {avg_loss:.4f}, MSE: {avg_mse:.4f}, PSNR: {avg_psnr:.2f}")
+                    eval_batch = next(iter(test_dataloader))[:4].to(device)
                 else:
-                    # 使用训练数据进行评估
-                    avg_loss, avg_mse, avg_psnr = simple_evaluate_model(
-                        model, trainer, batch[:4], device
-                    )
+                    eval_batch = batch[:4]
 
-                logger.log_metrics(global_step, avg_loss, avg_mse, avg_psnr)
+                # 评估模型
+                avg_loss = simple_evaluate_model(model, trainer, eval_batch, device)
+                logger.log(f"📊 评估损失: {avg_loss:.4f}")
 
-                # 生成简单的可视化样本
+                # 生成变形样本用于可视化
                 model.eval()
                 with torch.no_grad():
-                    # 选择评估用的批次
-                    eval_batch = test_batch if test_dataloader is not None else batch[:4]
+                    # 确保有足够的样本
+                    vis_batch_size = min(4, eval_batch.size(0))
 
                     # 随机选择变形程度
-                    t_vis = torch.randint(1, trainer.T + 1, (4,), device=device)
+                    t_vis = torch.randint(1, trainer.T + 1, (vis_batch_size,), device=device)
 
-                    # 生成变形样本（简化版）
+                    # 生成变形样本
                     deformed_samples = []
+                    for i in range(vis_batch_size):
+                        try:
+                            # 重置物理引擎状态
+                            trainer.forward_trainer.creep_engine.reset_control_state()
+                            # 生成物理变形
+                            x_t, _ = trainer.forward_trainer.forward_step_by_step(
+                                eval_batch[i:i + 1], t_vis[i].item()
+                            )
 
-                    for i in range(4):
-                        # 物理变形
-                        trainer.forward_trainer.reset_control_state()
-                        x_t, _ = trainer.forward_trainer.forward_step_by_step(
-                            eval_batch[i:i + 1], t_vis[i].item()
+                            # 检查返回的tensor是否有效
+                            if x_t.size(0) > 0:
+                                deformed_samples.append(x_t[0])
+                            else:
+                                logger.log(f"⚠️ 警告: 第{i}个样本变形失败，使用原图")
+                                deformed_samples.append(eval_batch[i])
+
+                        except Exception as e:
+                            logger.log(f"⚠️ 警告: 第{i}个样本变形出错: {e}")
+                            # 使用原图作为fallback
+                            deformed_samples.append(eval_batch[i])
+
+                    if deformed_samples:
+                        deformed_batch = torch.stack(deformed_samples)
+                        vis_original = eval_batch[:vis_batch_size]
+
+                        # 保存可视化（原图 vs 变形图）
+                        logger.save_training_visualization(
+                            vis_original, deformed_batch, global_step
                         )
-                        deformed_samples.append(x_t[0])
-
-                    deformed_batch = torch.stack(deformed_samples)
-
-                    # 保存可视化（暂时用原图作为"恢复"图像）
-                    logger.save_training_visualization(
-                        eval_batch, deformed_batch, eval_batch, global_step
-                    )
+                    else:
+                        logger.log("⚠️ 警告: 无法生成可视化样本")
 
                 model.train()
 
@@ -543,7 +471,7 @@ def train_model(args):
         # 计算平均损失
         avg_epoch_loss = epoch_loss / num_batches
 
-        # 每个epoch结束后在测试集上评估
+        # 每个epoch结束后评估
         if test_dataloader is not None:
             model.eval()
             test_loss = 0
@@ -559,7 +487,7 @@ def train_model(args):
             avg_test_loss = test_loss / test_batches
             logger.log(f"📊 Epoch {epoch + 1} - 训练损失: {avg_epoch_loss:.4f}, 测试损失: {avg_test_loss:.4f}")
 
-            # 使用测试损失选择最佳模型
+            # 保存最佳模型
             if avg_test_loss < best_loss:
                 best_loss = avg_test_loss
                 best_model_path = logger.checkpoints_dir / "best_model.pt"
@@ -601,8 +529,8 @@ def train_model(args):
             logger.plot_training_curves()
 
     # 训练完成
-    logger.log("🎉 训练完成!")
-    logger.log(f"🎯 最佳损失: {best_loss:.4f}")
+    logger.log("训练完成!")
+    logger.log(f"最佳损失: {best_loss:.4f}")
     logger.plot_training_curves()
 
     return model, trainer
@@ -613,7 +541,7 @@ def main():
 
     # 数据参数
     parser.add_argument('--dataset_root', type=str, required=True,
-                        help='数据集根目录路径（包含train和test文件夹，或者直接是图像文件夹）')
+                        help='数据集根目录路径')
     parser.add_argument('--output_dir', type=str, default='./outputs',
                         help='输出目录')
     parser.add_argument('--image_size', type=int, nargs=2, default=[640, 64],
@@ -622,9 +550,9 @@ def main():
                         help='图像通道数')
 
     # 训练参数
-    parser.add_argument('--num_epochs', type=int, default=20,
+    parser.add_argument('--num_epochs', type=int, default=10,
                         help='训练轮数')
-    parser.add_argument('--batch_size', type=int, default=8,
+    parser.add_argument('--batch_size', type=int, default=4,
                         help='批次大小')
     parser.add_argument('--lr', type=float, default=2e-4,
                         help='学习率')
@@ -674,7 +602,7 @@ def main():
                         help='扩散beta_1')
     parser.add_argument('--beta_T', type=float, default=0.02,
                         help='扩散beta_T')
-    parser.add_argument('--T', type=int, default=50,
+    parser.add_argument('--T', type=int, default=30,
                         help='扩散步数')
 
     # 物理参数
