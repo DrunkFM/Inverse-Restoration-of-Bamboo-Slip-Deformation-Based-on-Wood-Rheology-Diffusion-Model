@@ -550,7 +550,7 @@ def main():
                         help='图像通道数')
 
     # 训练参数
-    parser.add_argument('--num_epochs', type=int, default=10,
+    parser.add_argument('--num_epochs', type=int, default=20,
                         help='训练轮数')
     parser.add_argument('--batch_size', type=int, default=4,
                         help='批次大小')
@@ -602,7 +602,7 @@ def main():
                         help='扩散beta_1')
     parser.add_argument('--beta_T', type=float, default=0.02,
                         help='扩散beta_T')
-    parser.add_argument('--T', type=int, default=30,
+    parser.add_argument('--T', type=int, default=100,
                         help='扩散步数')
 
     # 物理参数
