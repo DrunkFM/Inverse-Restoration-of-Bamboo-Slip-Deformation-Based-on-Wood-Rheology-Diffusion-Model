@@ -291,10 +291,10 @@ def simple_evaluate_model(model, trainer, test_batch, device):
 
         for b in range(min(batch_size, 4)):  # 只测试前4个样本
             # 重置物理引擎
-            trainer.forward_trainer.creep_engine.reset_control_state()
+            trainer.forward_trainer.reset_control_state()
 
             # 进行物理变形
-            x_t, _ = trainer.forward_trainer.creep_engine.forward_step_by_step(
+            x_t, _ = trainer.forward_trainer.forward_step_by_step(
                 test_batch[b:b + 1], t_test[b].item()
             )
 
@@ -507,8 +507,8 @@ def train_model(args):
 
                     for i in range(4):
                         # 物理变形
-                        trainer.forward_trainer.creep_engine.reset_control_state()
-                        x_t, _ = trainer.forward_trainer.creep_engine.forward_step_by_step(
+                        trainer.forward_trainer.reset_control_state()
+                        x_t, _ = trainer.forward_trainer.forward_step_by_step(
                             eval_batch[i:i + 1], t_vis[i].item()
                         )
                         deformed_samples.append(x_t[0])
