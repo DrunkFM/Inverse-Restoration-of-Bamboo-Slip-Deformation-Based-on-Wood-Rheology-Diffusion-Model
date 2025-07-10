@@ -13,7 +13,7 @@ class CreepDiffusionTrainer(nn.Module):
     """
 
     def __init__(self, model, beta_1, beta_T, T,
-                 image_size=(640, 64), control_grid_size=(48, 6),
+                 image_size=(640, 64), 
                  **physics_params):
         super().__init__()
 
