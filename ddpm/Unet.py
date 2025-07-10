@@ -199,7 +199,7 @@ class ControlPointUNet(nn.Module):
             self,
             img_channels,
             base_channels,
-            control_grid_size=(48, 6),  # 与CreepDeformationEngine保持一致
+            control_grid_size=(4, 2),  # 与CreepDeformationEngine保持一致
             channel_mults=(1, 2, 4, 8),
             num_res_blocks=2,
             time_emb_dim=None,
