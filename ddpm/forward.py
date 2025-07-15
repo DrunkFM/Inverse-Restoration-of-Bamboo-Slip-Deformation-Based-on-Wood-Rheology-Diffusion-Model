@@ -29,7 +29,7 @@ class CreepDeformationEngine:
     4. ✅ 真正的累积变形
     """
 
-    def __init__(self, image_size=(640, 64), control_grid=(48, 6)):
+    def __init__(self, image_size=(640, 64), control_grid=(16, 4)):
         self.img_h, self.img_w = image_size
         self.ny, self.nx = control_grid
         self.setup_control_points()
@@ -434,8 +434,8 @@ class CreepDiffusionTrainer(nn.Module):
         self.image_size = image_size
 
         # 蠕变变形引擎
-        # control_grid = (48, 6)
-        control_grid = (4, 2)
+        # control_grid = (16, 4)
+        control_grid = (16, 4)
         self.creep_engine = CreepDeformationEngine(image_size=image_size, control_grid=control_grid)
 
         # DDPM参数（用于损失计算）
