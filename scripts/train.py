@@ -212,6 +212,7 @@ def create_model(args):
         max_physics_iterations=args.max_physics_iterations,
         convergence_threshold=args.convergence_threshold,
         boundary_factor=args.boundary_factor,
+        inertia_factor=args.inertia_factor,  # 新增动量参数
     )
 
     return model, trainer
@@ -624,6 +625,9 @@ def main():
                         help='收敛阈值')
     parser.add_argument('--boundary_factor', type=float, default=0.6,
                         help='边界因子')
+    # --- 新增物理参数 ---
+    parser.add_argument('--inertia_factor', type=float, default=0.7,
+                        help='惯性因子，控制变形速度的记忆效应 (0-1)')
 
     # 日志参数
     parser.add_argument('--log_interval', type=int, default=10,
