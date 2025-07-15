@@ -58,6 +58,10 @@ class CreepDeformationEngine:
         self.current_points = self.original_points.copy()
         self.cumulative_displacement_x = np.zeros(len(self.original_points))
         self.cumulative_displacement_y = np.zeros(len(self.original_points))
+        # --- 新增代码: 初始化速度向量 ---
+        self.velocity_x = np.zeros(len(self.original_points))
+        self.velocity_y = np.zeros(len(self.original_points))
+        
         self.step_count = 0
 
     def _generate_creep_transformation_matrices(self,
@@ -370,21 +374,35 @@ class CreepDeformationEngine:
 
         return deformed_image
 
-    def apply_creep_step(self, x_prev, t, total_steps, **kwargs):
-        """应用一步物理蠕变变形"""
-        # 生成变形矩阵
-        delta_x, delta_y = self._generate_creep_transformation_matrices(
+    def apply_creep_step(self, x_prev, t, total_steps, inertia_factor=0.7, **kwargs): # 增加 inertia_factor 参数
+        """应用一步物理蠕变变形（已加入速度记忆）"""
+        
+        # 1. 计算当前时间步的基础变形增量（可以理解为“外力”或“加速度”）
+        # 这部分逻辑不变
+        base_delta_x, base_delta_y = self._generate_creep_transformation_matrices(
             t, total_steps, **kwargs
         )
 
-        # 累积更新
-        self.cumulative_displacement_x += delta_x
-        self.cumulative_displacement_y += delta_y
+        # 2. 更新速度（核心惯性逻辑）
+        # 新的速度 = 惯性 * 旧速度 + (1 - 惯性) * 当前变形趋势
+        # 这是一种指数移动平均，可以平滑地更新速度向量
+        self.velocity_x = (inertia_factor * self.velocity_x) + ((1 - inertia_factor) * base_delta_x)
+        self.velocity_y = (inertia_factor * self.velocity_y) + ((1 - inertia_factor) * base_delta_y)
+
+        # 3. 本次步骤的最终位移就是当前的速度
+        # 这样，位移就包含了历史信息
+        final_delta_x = self.velocity_x
+        final_delta_y = self.velocity_y
+
+        # 4. 累积总位移（使用更新后的速度作为本步的位移）
+        self.cumulative_displacement_x += final_delta_x
+        self.cumulative_displacement_y += final_delta_y
+        
         self.current_points[:, 0] = self.original_points[:, 0] + self.cumulative_displacement_x
         self.current_points[:, 1] = self.original_points[:, 1] + self.cumulative_displacement_y
         self.step_count += 1
 
-        # 应用变形到图像
+        # 应用变形到图像 (这部分代码完全不变)
         batch_size = x_prev.shape[0]
         x_deformed = torch.zeros_like(x_prev)
 
