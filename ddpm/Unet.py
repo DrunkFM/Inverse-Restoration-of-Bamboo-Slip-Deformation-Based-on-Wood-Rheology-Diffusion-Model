@@ -54,9 +54,9 @@ class ControlPointRegressor(nn.Module):
             nn.Linear(feature_channels, feature_channels // 2),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(feature_channels // 2, feature_channels // 4),
+            nn.Linear(feature_channels // 2, feature_channels // ),
             nn.ReLU(),
-            nn.Linear(feature_channels // 4, num_control_points * 2)  # 每个控制点2个位移值(dx, dy)
+            nn.Linear(feature_channels // , num_control_points * 2)  # 每个控制点2个位移值(dx, dy)
         )
 
     def forward(self, features):
@@ -199,7 +199,7 @@ class ControlPointUNet(nn.Module):
             self,
             img_channels,
             base_channels,
-            control_grid_size=(4, 2),  # 与CreepDeformationEngine保持一致
+            control_grid_size=(16, 4),  # 与CreepDeformationEngine保持一致
             channel_mults=(1, 2, 4, 8),
             num_res_blocks=2,
             time_emb_dim=None,
@@ -487,7 +487,7 @@ def create_control_point_unet(img_channels=3, base_channels=64):
     return ControlPointUNet(
         img_channels=img_channels,
         base_channels=base_channels,
-        control_grid_size=(48, 6),  # 与CreepDeformationEngine一致
+        control_grid_size=(16, 4),  # 与CreepDeformationEngine一致
         channel_mults=(1, 2, 4, 8),
         num_res_blocks=2,
         time_emb_dim=256,
