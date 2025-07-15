@@ -553,7 +553,7 @@ def main():
     # 训练参数
     parser.add_argument('--num_epochs', type=int, default=20,
                         help='训练轮数')
-    parser.add_argument('--batch_size', type=int, default=4,
+    parser.add_argument('--batch_size', type=int, default=16,
                         help='批次大小')
     parser.add_argument('--lr', type=float, default=2e-4,
                         help='学习率')
@@ -581,7 +581,7 @@ def main():
                         help='时间嵌入缩放')
     parser.add_argument('--num_classes', type=int, default=0,
                         help='类别数量')
-    parser.add_argument('--dropout', type=float, default=0.1,
+    parser.add_argument('--dropout', type=float, default=0.2,
                         help='Dropout率')
     parser.add_argument('--attention_resolutions', type=int, nargs='+', default=[1, 2],
                         help='注意力分辨率')
@@ -593,9 +593,9 @@ def main():
                         help='最大位移')
 
     # 控制点参数
-    parser.add_argument('--control_nx', type=int, default=4,
+    parser.add_argument('--control_nx', type=int, default=16,
                         help='控制点X方向数量')
-    parser.add_argument('--control_ny', type=int, default=2,
+    parser.add_argument('--control_ny', type=int, default=4,
                         help='控制点Y方向数量')
 
     # 扩散参数
@@ -603,23 +603,23 @@ def main():
                         help='扩散beta_1')
     parser.add_argument('--beta_T', type=float, default=0.02,
                         help='扩散beta_T')
-    parser.add_argument('--T', type=int, default=100,
+    parser.add_argument('--T', type=int, default=50,
                         help='扩散步数')
 
     # 物理参数
-    parser.add_argument('--fiber_elongation_factor', type=float, default=0.15,
+    parser.add_argument('--fiber_elongation_factor', type=float, default=0.1,
                         help='纤维伸长因子')
     parser.add_argument('--force_coupling_strength', type=float, default=0.3,
                         help='力耦合强度')
-    parser.add_argument('--moisture_diffusion_coeff', type=float, default=0.1,
+    parser.add_argument('--moisture_diffusion_coeff', type=float, default=0.05,
                         help='水分扩散系数')
-    parser.add_argument('--em_modulus', type=float, default=1.0,
+    parser.add_argument('--em_modulus', type=float, default=0.6,
                         help='弹性模量')
-    parser.add_argument('--viscosity', type=float, default=10.0,
+    parser.add_argument('--viscosity', type=float, default=8.0,
                         help='黏性系数')
     parser.add_argument('--time_step', type=float, default=1.0,
                         help='时间步长')
-    parser.add_argument('--max_physics_iterations', type=int, default=20,
+    parser.add_argument('--max_physics_iterations', type=int, default=25,
                         help='最大物理迭代次数')
     parser.add_argument('--convergence_threshold', type=float, default=0.01,
                         help='收敛阈值')
