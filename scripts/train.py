@@ -553,7 +553,7 @@ def main():
     # 训练参数
     parser.add_argument('--num_epochs', type=int, default=20,
                         help='训练轮数')
-    parser.add_argument('--batch_size', type=int, default=16,
+    parser.add_argument('--batch_size', type=int, default=8,
                         help='批次大小')
     parser.add_argument('--lr', type=float, default=2e-4,
                         help='学习率')
