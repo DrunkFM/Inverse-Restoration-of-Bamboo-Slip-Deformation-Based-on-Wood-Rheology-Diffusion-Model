@@ -5,8 +5,11 @@ from scipy.interpolate import griddata
 from scipy.ndimage import map_coordinates
 import matplotlib.pyplot as plt
 from PIL import Image
+import torch.nn.functional as F
+
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
+
 
 def extract(v, t, x_shape):
     """
@@ -29,7 +32,7 @@ class CreepDeformationEngine:
     4. ✅ 真正的累积变形
     """
 
-    def __init__(self, image_size=(640, 64), control_grid=(16, 4)):
+    def __init__(self, image_size=(640, 24), control_grid=(32, 4)):
         self.img_h, self.img_w = image_size
         self.ny, self.nx = control_grid
         self.setup_control_points()
@@ -61,7 +64,7 @@ class CreepDeformationEngine:
         # --- 新增代码: 初始化速度向量 ---
         self.velocity_x = np.zeros(len(self.original_points))
         self.velocity_y = np.zeros(len(self.original_points))
-        
+
         self.step_count = 0
 
     def _generate_creep_transformation_matrices(self,
@@ -115,7 +118,7 @@ class CreepDeformationEngine:
         time_factor = t / total_steps  # 0到1的时间进度
         progressive_strength = time_factor * 1.5 + 0.5
 
-        #print(
+        # print(
         #    f"  竹简中心: ({center_x:.1f}, {center_y:.1f}), 时间因子: {time_factor:.3f}, 强度: {progressive_strength:.3f}")
 
         # 初始化变换向量
@@ -159,8 +162,8 @@ class CreepDeformationEngine:
             transform_x[i] = displacement_x
             transform_y[i] = displacement_y
 
-        #print(f"  Y位移范围: [{np.min(transform_y):.2f}, {np.max(transform_y):.2f}]")
-        #print(f"  X位移范围: [{np.min(transform_x):.2f}, {np.max(transform_x):.2f}]")
+        # print(f"  Y位移范围: [{np.min(transform_y):.2f}, {np.max(transform_y):.2f}]")
+        # print(f"  X位移范围: [{np.min(transform_x):.2f}, {np.max(transform_x):.2f}]")
 
         return transform_x, transform_y
 
@@ -187,7 +190,7 @@ class CreepDeformationEngine:
         stress_x = np.zeros(n_points)
         stress_y = np.zeros(n_points)
 
-        #print(f"  开始受力平衡迭代 (时间因子: {time_factor:.3f})...")
+        # print(f"  开始受力平衡迭代 (时间因子: {time_factor:.3f})...")
 
         # 迭代求解平衡状态 - 迭代次数与时间相关
         max_iterations = int(20 * (0.5 + time_factor * 0.5))  # 早期少迭代，后期多迭代
@@ -237,15 +240,15 @@ class CreepDeformationEngine:
             # 检查收敛性
             stress_change = np.max(np.abs(stress_x - old_stress_x)) + np.max(np.abs(stress_y - old_stress_y))
 
-            #if stress_change < convergence_threshold:
+            # if stress_change < convergence_threshold:
             #    print(f"  收敛于第{iteration + 1}次迭代，应力变化: {stress_change:.4f}")
             #    break
 
-        #if iteration == max_iterations - 1:
+        # if iteration == max_iterations - 1:
         #    print(f"  达到最大迭代次数{max_iterations}，最终应力变化: {stress_change:.4f}")
 
-        #print(f"  最终位移范围 - X: [{np.min(displacement_x):.2f}, {np.max(displacement_x):.2f}]")
-        #print(f"  最终位移范围 - Y: [{np.min(displacement_y):.2f}, {np.max(displacement_y):.2f}]")
+        # print(f"  最终位移范围 - X: [{np.min(displacement_x):.2f}, {np.max(displacement_x):.2f}]")
+        # print(f"  最终位移范围 - Y: [{np.min(displacement_y):.2f}, {np.max(displacement_y):.2f}]")
 
         return displacement_x, displacement_y
 
@@ -374,9 +377,9 @@ class CreepDeformationEngine:
 
         return deformed_image
 
-    def apply_creep_step(self, x_prev, t, total_steps, inertia_factor=0.7, **kwargs): # 增加 inertia_factor 参数
+    def apply_creep_step(self, x_prev, t, total_steps, inertia_factor=0.7, **kwargs):  # 增加 inertia_factor 参数
         """应用一步物理蠕变变形（已加入速度记忆）"""
-        
+
         # 1. 计算当前时间步的基础变形增量（可以理解为“外力”或“加速度”）
         # 这部分逻辑不变
         base_delta_x, base_delta_y = self._generate_creep_transformation_matrices(
@@ -397,7 +400,7 @@ class CreepDeformationEngine:
         # 4. 累积总位移（使用更新后的速度作为本步的位移）
         self.cumulative_displacement_x += final_delta_x
         self.cumulative_displacement_y += final_delta_y
-        
+
         self.current_points[:, 0] = self.original_points[:, 0] + self.cumulative_displacement_x
         self.current_points[:, 1] = self.original_points[:, 1] + self.cumulative_displacement_y
         self.step_count += 1
@@ -426,7 +429,7 @@ class CreepDiffusionTrainer(nn.Module):
     - 完整可视化
     """
 
-    def __init__(self, model, beta_1, beta_T, T, image_size=(640, 64)):
+    def __init__(self, model, beta_1, beta_T, T, image_size=(640, 24),control_grid = (32, 4)):
         super().__init__()
 
         self.model = model
@@ -434,8 +437,6 @@ class CreepDiffusionTrainer(nn.Module):
         self.image_size = image_size
 
         # 蠕变变形引擎
-        # control_grid = (16, 4)
-        control_grid = (16, 4)
         self.creep_engine = CreepDeformationEngine(image_size=image_size, control_grid=control_grid)
 
         # DDPM参数（用于损失计算）
@@ -445,11 +446,11 @@ class CreepDiffusionTrainer(nn.Module):
         self.register_buffer('sqrt_alphas_bar', torch.sqrt(alphas_bar))
         self.register_buffer('sqrt_one_minus_alphas_bar', torch.sqrt(1. - alphas_bar))
 
-        #print(f"🔬 物理蠕变扩散训练器已初始化")
-        #print(f"   时间步数: {T}")
-        #print(f"   图像尺寸: {image_size}")
-        #print(f"   控制点网格: {self.creep_engine.nx} × {self.creep_engine.ny}")
-        #print(f"   物理模型: 三步蠕变过程")
+        # print(f"🔬 物理蠕变扩散训练器已初始化")
+        # print(f"   时间步数: {T}")
+        # print(f"   图像尺寸: {image_size}")
+        # print(f"   控制点网格: {self.creep_engine.nx} × {self.creep_engine.ny}")
+        # print(f"   物理模型: 三步蠕变过程")
 
     def forward_step_by_step(self, x_0, target_t,
                              fiber_elongation_factor=0.15,
@@ -462,7 +463,7 @@ class CreepDiffusionTrainer(nn.Module):
                              convergence_threshold=0.01,
                              boundary_factor=0.6):
         """逐步前向扩散过程 - 使用物理蠕变"""
-        #print(f"🔬 物理蠕变逐步扩散: 0 → {target_t}")
+        # print(f"🔬 物理蠕变逐步扩散: 0 → {target_t}")
 
         # 重置状态
         self.creep_engine.reset_control_state()
@@ -491,40 +492,80 @@ class CreepDiffusionTrainer(nn.Module):
             total_deformation = torch.norm(x_current - x_0).item()
             pixel_change = torch.mean(torch.abs(x_current - x_0)).item()
 
-            #print(f"   📊 累积变形量: {total_deformation:.4f}")
-            #print(f"   📊 像素变化: {pixel_change:.4f}")
+            # print(f"   📊 累积变形量: {total_deformation:.4f}")
+            # print(f"   📊 像素变化: {pixel_change:.4f}")
 
         final_deformation = torch.norm(x_current - x_0).item()
-        #print(f"\n✅ 最终累积变形: {final_deformation:.4f}")
+        # print(f"\n✅ 最终累积变形: {final_deformation:.4f}")
 
         return x_current, deformation_history
 
-    def forward(self, x_0):
-        """训练时的前向过程（如果需要训练）"""
+    def forward(self, x_0, displacement_weight=1.0, reconstruction_weight=0.5):
+        """
+        训练前向过程 (新版：计算位移损失和重建损失)
+
+        Args:
+            x_0 (torch.Tensor): 原始清晰图像 (N, C, H, W)
+            displacement_weight (float): 位移损失的权重
+            reconstruction_weight (float): 重建损失的权重
+
+        Returns:
+            torch.Tensor: 加权后的总损失
+        """
         batch_size = x_0.shape[0]
         device = x_0.device
 
-        # 随机选择时间步
-        t = torch.randint(1, self.T + 1, size=(batch_size,), device=device)
+        # 1. 随机选择变形程度t
+        t = torch.randint(1, self.forward_trainer.T + 1, size=(batch_size,), device=device)
 
-        # 对每个样本进行逐步扩散
-        x_t_batch = torch.zeros_like(x_0)
+        # 2. 批量处理：每个样本独立进行物理变形，得到 x_t 和目标逆位移
+        x_t_batch = []
+        target_displacements_batch = []
 
         for b in range(batch_size):
-            x_t_single, _ = self.forward_step_by_step(x_0[b:b + 1], t[b].item())
-            x_t_batch[b:b + 1] = x_t_single
+            self.forward_trainer.creep_engine.reset_control_state()
+            x_t_single, _ = self.forward_trainer.forward_step_by_step(
+                x_0[b:b + 1], t[b].item(), **self.physics_params
+            )
 
-        # 计算目标变形场
-        target_deformation = self._compute_target_deformation(x_0, x_t_batch, t)
+            # 获取目标逆位移 (单位: 像素)
+            target_dx = -torch.from_numpy(self.forward_trainer.creep_engine.cumulative_displacement_x).float()
+            target_dy = -torch.from_numpy(self.forward_trainer.creep_engine.cumulative_displacement_y).float()
+            target_displacements = torch.stack([target_dx, target_dy], dim=1)
 
-        # 模型预测（如果有模型）
-        if self.model is not None:
-            predicted_deformation = self.model(x_t_batch, t)
-            loss = torch.nn.functional.mse_loss(predicted_deformation, target_deformation, reduction='none')
-            return loss
-        else:
-            # 只做前向扩散，不计算损失
-            return torch.zeros_like(x_0)
+            x_t_batch.append(x_t_single)
+            target_displacements_batch.append(target_displacements)
+
+        # 组装成一个批次
+        x_t_batch = torch.cat(x_t_batch, dim=0)
+        target_displacements_batch = torch.stack(target_displacements_batch, dim=0).to(device)
+
+        # 3. U-Net 预测逆位移
+        predicted_displacements = self.model(x_t_batch, t)
+
+        # 4. 计算位移损失 (Displacement Loss)
+        #    让模型预测的控制点位移尽可能接近真实逆位移
+        displacement_loss = F.mse_loss(predicted_displacements, target_displacements_batch)
+
+        # 5. 【核心新增】根据预测的位移，实际恢复图像
+        #    因为第一步的函数修改，这一整套流程现在是可微分的了
+        dense_displacement_field = self.model._control_points_to_dense_field(predicted_displacements)
+        restored_image = self.model._apply_dense_displacement(x_t_batch, dense_displacement_field)
+
+        # 6. 【核心新增】计算重建损失 (Reconstruction Loss)
+        #    让恢复的图像和原始图像在像素上尽可能接近
+        #    L1 Loss 对模糊不敏感，通常比 MSE 在图像重建任务上效果更好
+        reconstruction_loss = F.l1_loss(restored_image, x_0)
+
+        # 7. 加权合并总损失
+        total_loss = (displacement_weight * displacement_loss) + \
+                     (reconstruction_weight * reconstruction_loss)
+
+        # 打印损失值，方便监控训练过程 (可选)
+        if torch.rand(1) < 0.01:  # 每100次迭代打印一次
+            print(f"\n disp_loss: {displacement_loss.item():.4f}, recon_loss: {reconstruction_loss.item():.4f}")
+
+        return total_loss
 
     def _compute_target_deformation(self, x_0, x_t, t):
         """计算目标变形场"""
@@ -539,7 +580,7 @@ def test_physics_verification(image_path):
     """测试物理蠕变验证 - 完整版"""
     # 加载图像 - 竹简尺寸
     pil_image = Image.open(image_path).convert('RGB')
-    pil_image = pil_image.resize((64, 640))  # (宽, 高)
+    pil_image = pil_image.resize((24, 640))  # (宽, 高)
     img_array = np.array(pil_image).astype(np.float32) / 255.0
     x_0 = torch.from_numpy(img_array).permute(2, 0, 1).unsqueeze(0)
 
@@ -578,8 +619,8 @@ def test_physics_verification(image_path):
 
     results = []
     for run, param_set in enumerate(parameter_sets):
-        #print(f"\n--- 第{run + 1}次运行: {param_set['name']} ---")
-        trainer = CreepDiffusionTrainer(None, 1e-4, 0.02, 100, (640, 64))  # 竹简尺寸
+        # print(f"\n--- 第{run + 1}次运行: {param_set['name']} ---")
+        trainer = CreepDiffusionTrainer(None, 1e-4, 0.02, 100, (640, 24))  # 竹简尺寸
         x_t, _ = trainer.forward_step_by_step(x_0, 8, **param_set['params'])  # 减少步数加快测试
 
         deformation = torch.norm(x_t - x_0).item()
@@ -594,12 +635,12 @@ def test_physics_verification(image_path):
             'params': param_set['params']
         })
 
-        #print(f"   总变形: {deformation:.4f}")
-        #print(f"   像素变化: {pixel_change:.4f}")
+        # print(f"   总变形: {deformation:.4f}")
+        # print(f"   像素变化: {pixel_change:.4f}")
 
     # 分析物理差异
-    #print(f"\n🔍 物理参数影响分析:")
-    #for result in results:
+    # print(f"\n🔍 物理参数影响分析:")
+    # for result in results:
     #    print(f"   {result['name']}: 变形={result['deformation']:.4f}, 像素变化={result['pixel_change']:.4f}")
 
     # 物理合理性检查
@@ -679,13 +720,13 @@ def visualize_complete_results(trainer, x_0, steps=[10, 20, 30, 40, 50, 60, 70, 
     plt.savefig('physics_creep_diffusion_results_bamboo.png', dpi=150, bbox_inches='tight')
     plt.show()
 
-    #print(f"📸 已保存: physics_creep_diffusion_results_bamboo.png")
+    # print(f"📸 已保存: physics_creep_diffusion_results_bamboo.png")
     return fig
 
 
 def visualize_deformation_progression(trainer, x_0, total_steps=12):
     """可视化物理变形过程"""
-    #print(f"\n📈 可视化物理蠕变过程")
+    # print(f"\n📈 可视化物理蠕变过程")
 
     # 获取整个变形历史
     x_final, history = trainer.forward_step_by_step(x_0, total_steps)
@@ -747,6 +788,7 @@ def complete_physics_test_suite(image_path):
     visualize_deformation_progression(trainer, x_0)
 
     return trainer
+
 
 if __name__ == "__main__":
     image_path = r"D:\computer vision\Bamboo slips\data\classify\straight\11_1.png"
