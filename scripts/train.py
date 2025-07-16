@@ -179,7 +179,7 @@ def create_model(args):
     model = ControlPointUNet(
         img_channels=args.img_channels,
         base_channels=args.base_channels,
-        control_grid_size=(args.control_nx, args.control_ny),  # (4, 2)
+        control_grid_size=(args.control_ny, args.control_nx),
         channel_mults=args.channel_mults,
         num_res_blocks=args.num_res_blocks,
         time_emb_dim=args.time_emb_dim,
@@ -201,7 +201,7 @@ def create_model(args):
         beta_T=args.beta_T,
         T=args.T,
         image_size=args.image_size,
-        control_grid_size=(args.control_nx, args.control_ny),
+        control_grid_size=(args.control_ny, args.control_nx),
         # 物理参数
         fiber_elongation_factor=args.fiber_elongation_factor,
         force_coupling_strength=args.force_coupling_strength,
