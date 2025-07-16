@@ -8,10 +8,7 @@ from PIL import Image
 from pathlib import Path
 import datetime
 from tqdm import tqdm
-
-# 确保从您的项目中正确导入Unet
 from Unet import ControlPointUNet
-
 
 class BambooRestorer:
     """
