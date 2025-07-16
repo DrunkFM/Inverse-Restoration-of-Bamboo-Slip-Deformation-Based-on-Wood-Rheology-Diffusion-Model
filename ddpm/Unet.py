@@ -54,9 +54,9 @@ class ControlPointRegressor(nn.Module):
             nn.Linear(feature_channels, feature_channels // 2),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(feature_channels // 2, feature_channels // ),
+            nn.Linear(feature_channels // 2, feature_channels // 4),
             nn.ReLU(),
-            nn.Linear(feature_channels // , num_control_points * 2)  # 每个控制点2个位移值(dx, dy)
+            nn.Linear(feature_channels // 4, num_control_points * 2)  # 每个控制点2个位移值(dx, dy)
         )
 
     def forward(self, features):
@@ -199,7 +199,7 @@ class ControlPointUNet(nn.Module):
             self,
             img_channels,
             base_channels,
-            control_grid_size=(16, 4),  # 与CreepDeformationEngine保持一致
+            control_grid_size=(32, 4),  # 与CreepDeformationEngine保持一致
             channel_mults=(1, 2, 4, 8),
             num_res_blocks=2,
             time_emb_dim=None,
@@ -212,7 +212,7 @@ class ControlPointUNet(nn.Module):
             num_groups=32,
             initial_pad=0,
             max_displacement=50.0,
-            image_size=(640, 64),  # 竹简尺寸
+            image_size=(640, 24),  # 竹简尺寸
     ):
         super().__init__()
 
@@ -398,34 +398,31 @@ class ControlPointUNet(nn.Module):
     def predict_and_apply_deformation(self, deformed_image, deformation_step):
         """
         完整的预测和应用逆变形流程
-
-        Args:
-            deformed_image: 变形的竹简图像 (N, C, H, W)
-            deformation_step: 变形程度 (N,)
-
-        Returns:
-            restored_image: 恢复后的竹简图像
-            predicted_displacements: 预测的控制点位移
+        ...
         """
-        with torch.no_grad():
-            # 1. 预测控制点逆位移
-            predicted_displacements = self.forward(deformed_image, deformation_step)
+        # with torch.no_grad(): # 在推理时，这个 no_grad 应该在调用此函数的外层进行
+        # 1. 预测控制点逆位移
+        predicted_displacements = self.forward(deformed_image, deformation_step)
 
-            # 2. 将控制点位移转换为密集位移场
-            dense_displacement_field = self._control_points_to_dense_field(predicted_displacements)
+        # 2. 将控制点位移转换为密集位移场
+        #    【核心修改】在这里把当前图像的实际尺寸传递过去
+        dense_displacement_field = self._control_points_to_dense_field(
+            predicted_displacements,
+            target_img_shape=deformed_image.shape
+        )
 
-            # 3. 应用逆变形
-            restored_image = self._apply_dense_displacement(deformed_image, dense_displacement_field)
+        # 3. 应用逆变形
+        restored_image = self._apply_dense_displacement(deformed_image, dense_displacement_field)
 
-            return restored_image, predicted_displacements
+        return restored_image, predicted_displacements
 
-    def _control_points_to_dense_field(self, control_displacements):
+    def _control_points_to_dense_field(self, control_displacements, target_img_shape):
         """
         将控制点位移插值为密集位移场
         这个过程与CreepDeformationEngine中的_apply_deformation相对应
         """
-        batch_size = control_displacements.shape[0]
-        img_h, img_w = self.image_size
+        # 2. 使用传入的 target_img_shape 来获取尺寸，而不是 self.image_size
+        batch_size, _, img_h, img_w = target_img_shape
 
         # 创建目标网格
         y_coords, x_coords = np.mgrid[0:img_h, 0:img_w]
@@ -433,8 +430,8 @@ class ControlPointUNet(nn.Module):
         dense_fields = torch.zeros(batch_size, 2, img_h, img_w, device=control_displacements.device)
 
         for b in range(batch_size):
-            control_points_np = self.control_points.cpu().numpy()  # (num_points, 2)
-            displacements_np = control_displacements[b].cpu().numpy()  # (num_points, 2)
+            control_points_np = self.control_points.cpu().numpy()
+            displacements_np = control_displacements[b].cpu().numpy()
 
             # 分别插值x和y方向的位移
             try:
@@ -454,32 +451,56 @@ class ControlPointUNet(nn.Module):
         return dense_fields
 
     def _apply_dense_displacement(self, image, displacement_field):
-        """应用密集位移场进行图像变形"""
-        batch_size, channels, img_h, img_w = image.shape
+        """
+        应用密集位移场进行图像变形 - (新版：使用PyTorch实现，可微分)
 
-        # 创建坐标网格
-        y_coords, x_coords = np.mgrid[0:img_h, 0:img_w]
+        Args:
+            image (torch.Tensor): 变形前的图像 (N, C, H, W)
+            displacement_field (torch.Tensor): 密集位移场 (N, 2, H, W)，其中通道0是dx, 通道1是dy
 
-        restored_batch = torch.zeros_like(image)
+        Returns:
+            torch.Tensor: 变形后的图像
+        """
+        batch_size, _, img_h, img_w = image.shape
+        device = image.device
 
-        for b in range(batch_size):
-            img_np = image[b].cpu().numpy()
-            disp_np = displacement_field[b].cpu().numpy()
+        # 1. 创建一个标准化的坐标网格 (-1到1)
+        #    grid_sample 需要这个格式
+        y_coords, x_coords = torch.meshgrid(torch.linspace(-1, 1, img_h, device=device),
+                                            torch.linspace(-1, 1, img_w, device=device),
+                                            indexing='ij')
 
-            # 应用逆变形
-            map_x = x_coords - disp_np[0]  # 逆向位移
-            map_y = y_coords - disp_np[1]
+        # 将网格形状变为 (1, H, W, 2) 以便广播
+        identity_grid = torch.stack((x_coords, y_coords), dim=2).unsqueeze(0)
 
-            restored_img = np.zeros_like(img_np)
-            for c in range(channels):
-                restored_img[c] = map_coordinates(
-                    img_np[c], [map_y, map_x],
-                    order=1, mode='reflect', prefilter=False
-                )
+        # 2. 将像素单位的位移场转换为标准化的位移
+        #    - displacement_field 的单位是像素
+        #    - 标准化网格的单位是1 (半个图像尺寸)
+        #    - 所以需要将位移除以半个图像尺寸
+        dx = displacement_field[:, 0, :, :]  # (N, H, W)
+        dy = displacement_field[:, 1, :, :]  # (N, H, W)
 
-            restored_batch[b] = torch.from_numpy(restored_img)
+        # 转换到 [-1, 1] 空间
+        # 2.0 / img_w 是因为 [-1, 1] 的总范围是2
+        norm_dx = dx * (2.0 / (img_w - 1))
+        norm_dy = dy * (2.0 / (img_h - 1))
 
-        return restored_batch.to(image.device)
+        norm_displacement = torch.stack((norm_dx, norm_dy), dim=3)  # (N, H, W, 2)
+
+        # 3. 计算采样网格
+        #    新坐标 = 原始坐标 - 位移 (因为我们要从源图像的哪个位置'拉取'像素)
+        sampling_grid = identity_grid - norm_displacement
+
+        # 4. 使用 grid_sample 进行可微分的图像变形
+        restored_image = torch.nn.functional.grid_sample(
+            image,
+            sampling_grid,
+            mode='bilinear',  # 双线性插值
+            padding_mode='border',  # 边界像素填充
+            align_corners=True  # 保持角落像素对齐
+        )
+
+        return restored_image
 
 # 使用示例
 def create_control_point_unet(img_channels=3, base_channels=64):
@@ -487,7 +508,7 @@ def create_control_point_unet(img_channels=3, base_channels=64):
     return ControlPointUNet(
         img_channels=img_channels,
         base_channels=base_channels,
-        control_grid_size=(16, 4),  # 与CreepDeformationEngine一致
+        control_grid_size=(32, 4),  # 与CreepDeformationEngine一致
         channel_mults=(1, 2, 4, 8),
         num_res_blocks=2,
         time_emb_dim=256,
@@ -498,7 +519,7 @@ def create_control_point_unet(img_channels=3, base_channels=64):
         norm="gn",
         num_groups=32,
         max_displacement=50.0,
-        image_size=(640, 64),  # 竹简尺寸
+        image_size=(640, 24),  # 竹简尺寸
     )
 
 
