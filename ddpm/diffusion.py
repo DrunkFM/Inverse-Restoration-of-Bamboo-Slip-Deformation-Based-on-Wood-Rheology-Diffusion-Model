@@ -13,7 +13,7 @@ class CreepDiffusionTrainer(nn.Module):
     """
 
     def __init__(self, model, beta_1, beta_T, T,
-                 image_size=(640, 64), control_grid_size=(16, 4),
+                 image_size=(640, 24), control_grid_size=(32,4),
                  **physics_params):
         super().__init__()
 
@@ -23,7 +23,8 @@ class CreepDiffusionTrainer(nn.Module):
             beta_1=beta_1,
             beta_T=beta_T,
             T=T,
-            image_size=image_size
+            image_size=image_size,
+            control_grid=control_grid_size
         )
 
         self.model = model  # ControlPointUNet
