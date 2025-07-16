@@ -39,7 +39,7 @@ class BambooRestorer:
             model = ControlPointUNet(
                 img_channels=args.img_channels,
                 base_channels=args.base_channels,
-                control_grid_size=(args.control_nx, args.control_ny),
+                control_grid_size=(args.control_ny, args.control_nx),
                 channel_mults=args.channel_mults,
                 num_res_blocks=args.num_res_blocks,
                 time_emb_dim=args.time_emb_dim,
@@ -88,7 +88,7 @@ class BambooRestorer:
 
         return model
 
-    def load_image(self, image_path, target_size=(640, 64)):
+    def load_image(self, image_path, target_size=(640, 24)):
         """加载并预处理单张竹简图像"""
         try:
             pil_image = Image.open(image_path).convert('RGB')
