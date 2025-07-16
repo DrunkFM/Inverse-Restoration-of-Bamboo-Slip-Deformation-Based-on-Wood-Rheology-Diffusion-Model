@@ -12,7 +12,6 @@ from PIL import Image
 from pathlib import Path
 from tqdm import tqdm
 
-# 导入我们的模块
 from Unet import ControlPointUNet
 from diffusion import CreepDiffusionTrainer
 from forward import CreepDeformationEngine
@@ -54,7 +53,6 @@ class BambooSlipsDataset(Dataset):
             if self.transform:
                 img_tensor = self.transform(img)
             else:
-                # 手动转换为tensor
                 img_array = np.array(img, dtype=np.float32) / 255.0
                 img_tensor = torch.from_numpy(img_array).permute(2, 0, 1)
 
