@@ -21,7 +21,7 @@ from forward import CreepDeformationEngine
 class BambooSlipsDataset(Dataset):
     """竹简数据集"""
 
-    def __init__(self, root_dir, transform=None, image_size=(640, 64)):
+    def __init__(self, root_dir, transform=None, image_size=(640, 32)):
         self.root_dir = root_dir
         self.transform = transform
         self.image_size = image_size
@@ -212,7 +212,6 @@ def create_model(args):
         max_physics_iterations=args.max_physics_iterations,
         convergence_threshold=args.convergence_threshold,
         boundary_factor=args.boundary_factor,
-        inertia_factor=args.inertia_factor,  # 新增动量参数
     )
 
     return model, trainer
@@ -530,8 +529,8 @@ def train_model(args):
             logger.plot_training_curves()
 
     # 训练完成
-    logger.log("训练完成!")
-    logger.log(f"最佳损失: {best_loss:.4f}")
+    logger.log("🎉 训练完成!")
+    logger.log(f"🎯 最佳损失: {best_loss:.4f}")
     logger.plot_training_curves()
 
     return model, trainer
@@ -541,19 +540,19 @@ def main():
     parser = argparse.ArgumentParser(description='竹简蠕变扩散模型训练')
 
     # 数据参数
-    parser.add_argument('--dataset_root', type=str, required=True,
+    parser.add_argument('--dataset_root', type=str, default=r'D:\python_app\DDPM\BambooSlips',
                         help='数据集根目录路径')
     parser.add_argument('--output_dir', type=str, default='./outputs',
                         help='输出目录')
-    parser.add_argument('--image_size', type=int, nargs=2, default=[640, 64],
+    parser.add_argument('--image_size', type=int, nargs=2, default=[640, 24],
                         help='图像尺寸 [H, W]')
     parser.add_argument('--img_channels', type=int, default=3,
                         help='图像通道数')
 
     # 训练参数
-    parser.add_argument('--num_epochs', type=int, default=20,
+    parser.add_argument('--num_epochs', type=int, default=30,
                         help='训练轮数')
-    parser.add_argument('--batch_size', type=int, default=8,
+    parser.add_argument('--batch_size', type=int, default=2,
                         help='批次大小')
     parser.add_argument('--lr', type=float, default=2e-4,
                         help='学习率')
@@ -581,7 +580,7 @@ def main():
                         help='时间嵌入缩放')
     parser.add_argument('--num_classes', type=int, default=0,
                         help='类别数量')
-    parser.add_argument('--dropout', type=float, default=0.2,
+    parser.add_argument('--dropout', type=float, default=0.1,
                         help='Dropout率')
     parser.add_argument('--attention_resolutions', type=int, nargs='+', default=[1, 2],
                         help='注意力分辨率')
@@ -593,9 +592,9 @@ def main():
                         help='最大位移')
 
     # 控制点参数
-    parser.add_argument('--control_nx', type=int, default=16,
+    parser.add_argument('--control_nx', type=int, default=4,
                         help='控制点X方向数量')
-    parser.add_argument('--control_ny', type=int, default=4,
+    parser.add_argument('--control_ny', type=int, default=32,
                         help='控制点Y方向数量')
 
     # 扩散参数
@@ -603,19 +602,19 @@ def main():
                         help='扩散beta_1')
     parser.add_argument('--beta_T', type=float, default=0.02,
                         help='扩散beta_T')
-    parser.add_argument('--T', type=int, default=50,
+    parser.add_argument('--T', type=int, default=100,
                         help='扩散步数')
 
     # 物理参数
-    parser.add_argument('--fiber_elongation_factor', type=float, default=0.1,
+    parser.add_argument('--fiber_elongation_factor', type=float, default=0.15,
                         help='纤维伸长因子')
     parser.add_argument('--force_coupling_strength', type=float, default=0.3,
                         help='力耦合强度')
-    parser.add_argument('--moisture_diffusion_coeff', type=float, default=0.05,
+    parser.add_argument('--moisture_diffusion_coeff', type=float, default=0.1,
                         help='水分扩散系数')
     parser.add_argument('--em_modulus', type=float, default=0.6,
                         help='弹性模量')
-    parser.add_argument('--viscosity', type=float, default=8.0,
+    parser.add_argument('--viscosity', type=float, default=10.0,
                         help='黏性系数')
     parser.add_argument('--time_step', type=float, default=1.0,
                         help='时间步长')
@@ -625,18 +624,17 @@ def main():
                         help='收敛阈值')
     parser.add_argument('--boundary_factor', type=float, default=0.6,
                         help='边界因子')
-    # --- 新增物理参数 ---
-    parser.add_argument('--inertia_factor', type=float, default=0.7,
+    parser.add_argument('--inertia_factor', type=float, default=0.8,
                         help='惯性因子，控制变形速度的记忆效应 (0-1)')
 
     # 日志参数
-    parser.add_argument('--log_interval', type=int, default=10,
+    parser.add_argument('--log_interval', type=int, default=100,
                         help='日志记录间隔')
     parser.add_argument('--sample_interval', type=int, default=500,
                         help='样本保存间隔')
     parser.add_argument('--save_interval', type=int, default=2000,
                         help='检查点保存间隔')
-    parser.add_argument('--plot_interval', type=int, default=10,
+    parser.add_argument('--plot_interval', type=int, default=100,
                         help='绘图间隔')
 
     args = parser.parse_args()
